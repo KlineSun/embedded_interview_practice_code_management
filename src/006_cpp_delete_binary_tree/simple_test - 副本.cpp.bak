@@ -1,0 +1,259 @@
+#include <iostream>
+#include <vector>
+#include <stdio.h>
+#include <string.h>
+#include <limits>
+
+using namespace std;
+
+
+struct TreeNode {
+    int val;
+    TreeNode *left;
+    TreeNode *right;
+    TreeNode() : val(0), left(nullptr), right(nullptr) {}
+    TreeNode(int x) : val(x), left(nullptr), right(nullptr) {}
+    TreeNode(int x, TreeNode *left, TreeNode *right) : val(x), left(left), right(right) {}
+};
+
+
+class Solution {
+
+    struct TreeNodePro
+    {
+        TreeNode *parent;
+        TreeNode *self;
+
+        TreeNodePro(TreeNode *myself) : parent(nullptr), self(myself) {};
+        TreeNodePro(TreeNode *myself, TreeNode *myparent) : parent(myparent), self(myself) {};
+    };
+    
+
+public:
+    TreeNode* treeRoot;
+    vector<TreeNodePro *> orderProVec; // 有序的pro节点列表
+    TreeNode* delNode;
+    bool needReplace; // 无法再遍历中完成替换，在有序列表中进行替换
+    unsigned int delIdx;
+
+    // replace不能是根节点
+    void replaceNode(TreeNodePro* node, TreeNodePro* replace) {
+        printf("replace %d --> %d\n", replace->self->val, node->self->val);
+        // 替换父节点的链接
+        if (node->parent) {
+            if (node->self == node->parent->left)
+                node->parent->left = replace->self;
+            if (node->self == node->parent->right)
+                node->parent->right = replace->self;
+        } else {
+            treeRoot = replace->self; // 没有父节点那就是根
+        }
+
+        // 替换子节点的链接
+        if (node->self->left == replace->self || replace->self->right == node->self) {
+            // 两节点相邻
+            if (replace->self->val < node->self->val)
+                replace->self->right = node->self->right;
+            else
+                replace->self->left = node->self->left;
+        } else {
+            // 不相邻
+            // 处理替换节点的子节点
+            if (replace->self->val < node->self->val)
+                replace->parent->left = replace->self->right;
+            else
+                replace->parent->right = replace->self->left;
+
+            // 替换节点指向node的节点
+            replace->self->left = node->self->left;
+            replace->self->right = node->self->right;
+        }
+    }
+
+    void inorderTraversal(TreeNode* node, TreeNode* parent, int key) {
+        if (!node)
+            return;
+
+        inorderTraversal(node->left, node, key);
+        if (node->val == key) {
+            cout << "found target node: " << node->val << endl;
+            delNode = node;
+            // 如果是叶子节点，直接删除即可
+            if (!node->left && !node->right) {
+                cout << "leaf node!" << endl;
+                if (parent && node == parent->left)
+                    parent->left = nullptr;
+                if (parent && node == parent->right)
+                    parent->right = nullptr;
+                if (!parent) // 只有一个节点的情况
+                    treeRoot = nullptr;
+                goto jump_out;
+            }
+
+            // 直线结构不需要找替换者
+            if (parent && node == parent->left && !node->right) {
+                cout << "straight line!" << endl;
+                parent->left = node->left;
+                goto jump_out;
+            }
+            if (parent && node == parent->right && !node->left) {
+                cout << "straight line!" << endl;
+                parent->right = node->right;
+                goto jump_out;
+            }
+
+            // 如果是最小值，且不为叶子节点，有右孩子
+            if (orderProVec.empty()) {
+                cout << "min value" << endl;
+                if (parent)
+                    parent->left = node->right;
+                else
+                    treeRoot = node->right; // 没有父节点那就是根
+                goto jump_out;
+            }
+
+            // 需要替换者，记录当前节点
+            cout << "Need replace!" << endl;
+            needReplace = true;
+            delIdx = orderProVec.size();
+            TreeNodePro *proNode = new TreeNodePro(node, parent);
+            orderProVec.push_back(proNode);
+        } else {
+            TreeNodePro *proNode = new TreeNodePro(node, parent);
+            orderProVec.push_back(proNode);
+        }
+jump_out:
+        inorderTraversal(node->right, node, key);
+    }
+
+
+    TreeNode* deleteNode(TreeNode* root, int key) {
+        treeRoot = root;
+        needReplace = false;
+        inorderTraversal(root, nullptr, key); // 中序遍历构造父节点关系
+
+        if (delNode) {
+            // 找到要删除的节点
+            if (needReplace) {
+                cout << "delete node: " << orderProVec[delIdx]->self->val << endl;
+                // 需要替换者
+                if (delIdx == (orderProVec.size() - 1)) { // 最大值
+                    if (orderProVec[delIdx]->parent)
+                        orderProVec[delIdx]->parent->right = orderProVec[delIdx]->self->left;
+                    else
+                        treeRoot = orderProVec[delIdx]->self->left;
+                } else if (orderProVec[delIdx-1]->self != treeRoot) {
+                    replaceNode(orderProVec[delIdx], orderProVec[delIdx-1]);
+                }  else {
+                    replaceNode(orderProVec[delIdx], orderProVec[delIdx+1]);
+                }
+                orderProVec.erase(orderProVec.begin() + delIdx);
+            }
+            // delete delNode;
+        } else {
+            // 未找到要删除的节点
+            cout << "Not found key val: " << key << endl;
+        }
+
+        cout << "sequence: ";
+        for (TreeNodePro *proNode : orderProVec) {
+            cout << proNode->self->val << " ";
+        }
+        cout << endl;
+        printTree();
+        return treeRoot;
+    }
+
+    void printChild(TreeNode *node) {
+        if (!node /*|| (!node->left && !node->right)*/) // 空节点或者叶子节点，不进行打印
+            return;
+
+        if (node->left)
+            cout << ", " << node->left->val;
+        else
+            cout << ", null";
+
+        if (node->right)
+            cout << ", " << node->right->val;
+        else
+            cout << ", null";
+
+        if (!node->left && !node->right)
+            return;
+
+        printChild(node->left);
+        printChild(node->right);
+    }
+
+    void printTree() {
+        cout << "[" << treeRoot->val; // 打印括号和根
+        printChild(treeRoot);
+        cout << "]" << endl;
+    }
+
+    void releaseNode(TreeNode *node) {
+        if (!node) // 空节点跳过
+            return;
+
+        if (node->left) {
+            releaseNode(node->left); // 先释放左节点
+            node->left = nullptr;
+        }
+    
+        if (node->right) {
+            releaseNode(node->right); // 再释放右节点
+            node->right = nullptr;
+        }
+
+        // 释放自己
+        cout << "release node: " << node->val << endl;
+        delete node;
+    }
+
+    Solution() : treeRoot{nullptr} {};
+    virtual ~Solution() {};
+};
+
+TreeNode* buildRawTree() {
+    TreeNode* treeRoot;
+
+    // [1,3,null,null,2]
+    // treeRoot = new TreeNode(1, (new TreeNode(3)), nullptr);
+    // treeRoot->left->right = new TreeNode(2);
+
+    // [3,1,4,null,null,2]
+    // treeRoot = new TreeNode(3, (new TreeNode(1)), (new TreeNode(4)));
+    // treeRoot->right->left = new TreeNode(2);
+
+    // TreeNode *lchild, *rchild, *parent;
+    // rchild = new TreeNode(60, (new TreeNode(55)), (new TreeNode(70)));
+    // lchild = new TreeNode(40);
+    // parent = new TreeNode(50, lchild, rchild);
+    // treeRoot = new TreeNode(30, (new TreeNode(10)), parent);
+
+    // [2,1]
+    treeRoot = new TreeNode(2, (new TreeNode(1)), nullptr);
+
+    return treeRoot;
+}
+
+
+/*
+练习题：
+给定一个二叉搜索树的根节点 root 和一个值 key，删除二叉搜索树中的 key 对应的节点，并保证二叉搜索树的性质不变。返回二叉搜索树（有可能被更新）的根节点的引用。
+
+一般来说，删除节点可分为两个步骤：
+首先找到需要删除的节点；
+如果找到了，删除它。
+
+解题思路：
+    堆排序
+*/
+int main(int argc, const char **argv)
+{
+    Solution s;
+
+    s.deleteNode(buildRawTree(), 2);
+
+    return 0;
+}
